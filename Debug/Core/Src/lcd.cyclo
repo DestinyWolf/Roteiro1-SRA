@@ -1,0 +1,12 @@
+../Core/Src/lcd.c:58:6:LCD_Test	6
+../Core/Src/lcd.c:109:6:LCD_SetBrightness	1
+../Core/Src/lcd.c:114:10:LCD_GetBrightness	1
+../Core/Src/lcd.c:123:6:LCD_Light	4
+../Core/Src/lcd.c:171:6:LCD_ShowChar	20
+../Core/Src/lcd.c:255:6:LCD_ShowString	5
+../Core/Src/lcd.c:270:16:lcd_init	1
+../Core/Src/lcd.c:277:16:lcd_gettick	1
+../Core/Src/lcd.c:282:16:lcd_writereg	3
+../Core/Src/lcd.c:299:16:lcd_readreg	2
+../Core/Src/lcd.c:316:16:lcd_senddata	2
+../Core/Src/lcd.c:330:16:lcd_recvdata	2

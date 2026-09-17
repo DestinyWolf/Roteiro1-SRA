@@ -1,0 +1,13 @@
+../Core/Inc/bno055_stm32.h:20:6:bno055_assignI2C	1
+../Core/Inc/bno055_stm32.h:24:6:bno055_delay	1
+../Core/Inc/bno055_stm32.h:32:6:bno055_writeData	24
+../Core/Inc/bno055_stm32.h:96:6:bno055_readData	1
+../Core/Src/main.c:161:6:LED_Pisca	1
+../Core/Src/main.c:223:7:computePIDLeft	3
+../Core/Src/main.c:244:7:computePIDRight	3
+../Core/Src/main.c:266:7:OmegaSpeedLeft	1
+../Core/Src/main.c:271:7:OmegaSpeedRight	1
+../Core/Src/main.c:300:6:Wheel_Commands	1
+../Core/Src/main.c:572:6:Error_Handler	1
+../Core/Src/main.c:505:6:SystemClock_Config	4
+../Core/Src/main.c:347:5:main	8
