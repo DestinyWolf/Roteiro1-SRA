@@ -22,11 +22,6 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-extern volatile int16_t valor_pwm;
-extern volatile uint8_t init_test;
-extern volatile uint16_t tal;
-extern volatile uint8_t dir_left;
-extern volatile uint8_t dir_right;
 #include <stdlib.h>
 
 /* USER CODE END INCLUDE */
@@ -267,76 +262,6 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
 {
   /* USER CODE BEGIN 6 */
-	static char linha_recebida[16];
-	static uint8_t indice= 0;
-	static char command='P';
-
-	for (uint32_t i = 0; i< *Len; i++) {
-
-		char caracter = (char)Buf[i];
-
-		//pode ser D*
-		//pode ser E*
-		//pode ser T*
-		//pode ser P*
-		//pode ser S
-
-		if ((caracter == 'D' || caracter == 'E' || caracter == 'T' || caracter == 'P' || caracter == 'S') && i == 0) {
-			command = caracter;
-		} else if (caracter == '\n' || caracter == '\r') {
-			if ((indice > 0  && command != 'S') || (indice == 0 && command == 'S')) {
-				linha_recebida[indice] = '\0';
-
-				uint8_t msg_ok[50];
-				int tmp_val = 0;
-				int msg_len=0;
-				tmp_val = atoi(linha_recebida);
-				if (command == 'P') {
-					valor_pwm = (int16_t)tmp_val;
-					msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "velocidade angular desejada atualizado para: %d\r\n", valor_pwm);
-				} else if (command == 'T') {
-					tal = (uint16_t)tmp_val;
-					msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "Tal definido para: %d\r\n", tal);
-				} else if (command == 'S') {
-					if (init_test == 0) {
-						init_test = 1;
-					} else {
-						init_test = 0;
-					}
-					msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "Estado do teste: %d\r\n", init_test);
-				} else if (command == 'E' ) {
-					dir_left = (uint8_t)tmp_val;
-					msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "Direção esquerda alterada para: %d\r\n", dir_left);
-				} else if (command == 'D') {
-					dir_right = (uint8_t)tmp_val;
-					msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "Direção direita alterada para: %d\r\n", dir_right);
-				}
-				CDC_Transmit_FS(msg_ok, msg_len);
-				indice = 0;
-			}
-		} else if ((((caracter >= '0' && caracter <= '9') || caracter == '-') && indice <(sizeof(linha_recebida)-1))) {
-			linha_recebida[indice++] = caracter;
-		}
-
-//		if (caracter == 'S') {
-//			init_test = 1;
-//		} else if (caracter == '\n' || caracter == '\r') {
-//			if (indice >0) {
-//				linha_recebida[indice] = '\0';
-//
-//				int tmp_val = atoi(linha_recebida);
-//				valor_pwm = (uint16_t)tmp_val;
-//				uint8_t msg_ok[50];
-//				int msg_len = snprintf((char*)msg_ok, sizeof(msg_ok), "PWM atualizado para: %d\r\n", valor_pwm);
-//				CDC_Transmit_FS(msg_ok, msg_len);
-//
-//				indice = 0;
-//			}
-//		} else if (caracter >= '0' && caracter <= '9' && indice <(sizeof(linha_recebida)-1)) {
-//			linha_recebida[indice++] = caracter;
-//		}
-	}
-
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   return (USBD_OK);

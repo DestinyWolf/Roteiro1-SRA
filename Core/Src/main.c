@@ -67,13 +67,8 @@ typedef struct RoboDiferencial {
 
 /* USER CODE BEGIN PV */
 
-//receber o valor do pwm
-volatile int16_t valor_pwm = 0;
-volatile uint8_t init_test = 0;
-volatile uint8_t dir_left = 0;
-volatile uint8_t dir_right = 0;
-volatile uint16_t tal = 0;
-
+//valor da velocidade linear
+float vel_linear = 0.05;
 
 // Sinal de controle, ciclo de duração PWM
 int CH1_PWM_duty = 0; // Inicializa ciclo de duração PWM
@@ -89,15 +84,8 @@ int32_t dif_countLeft = 0;
 int32_t dif_countRight = 0;
 
 
-// To Integration Time
-float errorLeft = 0;
-float lasterrorLeft = 0;
-float errorRight = 0;
-float lasterrorRight = 0;
-float Ts = 1.0;  // Ts = 10ms
-float Td = 1.0; // Filter time constant  Td=1ms
+float Ts = 1.0;  // Ts = 1ms
 float Time = 0; // increment in ms
-float deltaPWMmax = 100.0; // Valor do 100% do ciclo de duração
 
 float wheelMEASLeft, wheelMEASRight;
 
@@ -106,8 +94,8 @@ float wheelMEASLeft, wheelMEASRight;
 roboDiferencial_t robo = {
 		.L = 22.0,
 		.raio_roda = 3.625,
-		.rpm_max = 370,
-		.rpm_min = -370,
+		.rpm_max = 209,
+		.rpm_min = -209,
 		.velocidade_angular = 0.0,
 		.velocidade_linear = 0.0
 };
@@ -184,66 +172,10 @@ void LED_Pisca(uint32_t delay)
 	HAL_Delay(delay);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////
-//  PID Functions for independent wheel, Left and Right
-// u(t) = Kp*e(t) + Ki*int_{-infty}^{t}e(tau)dtau + Kd de(t)/dt    <- Descrição de função contínua
-//
-// Up(z) = Kp*E(z)    <---->  up[n]=Kp*e[n]
-
-// Ui(z) = Ki*Ts*E(z)/(z-1)
-// Ui(z)(z-1) = Ki*Ts*E(z) <----> ui[n+1]-ui[n] = Ki*Ts*e[n]
-//
-// Ud(z) = (Kd/Ts)*E(z)*(z-1)/z <----> ud[n+1]=(Kd/Ts)*(e[n+1]-e[n])
-// e[n]=0;
-// e[n+1]=wheelSet[n+1] - inPID[n+1]
-// e[n]=e[n+1];  loop
-////////////////////////////////////////////////////////////////////////////////////////////////
-//float computePIDLeft(float wheelMEASLeft, float wheelSetLeft){
-//  errorLeft = (float)(wheelSetLeft - wheelMEASLeft);  // Determine the Error
-//  uiLeft += (float)(Ki*(Ts/1000.0)*errorLeft); // Compute de Ingregral Error
-//  udLeft = (float)((errorLeft - lasterrorLeft)/(Ts/1000.0)); // Compute the Derivative Error
-//  float outPIDLeft = (float)(Kp*errorLeft + uiLeft + Kd*udLeft);
-//  lasterrorLeft = (float)errorLeft;
-//
-//  // antiwind up action
-//     if (outPIDLeft > deltaPWMmax)
-//     {
-//        uiLeft -= (float)(outPIDLeft-deltaPWMmax);//(Ki*(Ts/100)*(outPIDLeft-deltaPWMmax));
-//        outPIDLeft = deltaPWMmax;
-//     }
-//     else if (outPIDLeft < 0)
-//     {
-//    	uiLeft += -(float)(outPIDLeft);//(Ki*(Ts/100)*(outPIDLeft));
-//    	outPIDLeft = 0;
-//     }
-//  return outPIDLeft;
-//}
-//
-//float computePIDRight(float wheelMEASRight, float wheelSetRight){
-//  errorRight = (float)(wheelSetRight - wheelMEASRight);  // Determine the Error
-//  uiRight += (float)(Ki*(Ts/1000.0)*errorRight); // Compute de Ingregral Error
-//  udRight = (float)((errorRight - lasterrorRight)/(Ts/1000.0)); // Compute the Derivative Error
-//  float outPIDRight = (float)(Kp*errorRight + uiRight + Kd*udRight);
-//  lasterrorRight = (float)errorRight;
-//
-//  // antiwind up action
-//      if (outPIDRight > deltaPWMmax)
-//      {
-//         uiRight -= (float)(outPIDRight-deltaPWMmax);//(Ki*(Ts/100)*(outPIDRight-deltaPWMmax));
-//         outPIDRight = deltaPWMmax;
-//      }
-//      else if (outPIDRight < 0)
-//      {
-//      	 uiRight += -(float)(outPIDRight);//(Ki*(Ts/100)*(outPIDRight));
-//      	 outPIDRight = 0;
-//      }
-//  return outPIDRight;
-//}
-
 float calcular_PID(controleMotor_t *ctrl, float dt) {
 
 	uint8_t text[200];
-	/*Controle motor é o motor a ser controlado, dt é o tempo de amostragem*/
+	/*ctrl é o motor a ser controlado, dt é o tempo de amostragem*/
 	float erro, P, I, D;
 
 	float saida_bruta;
@@ -274,20 +206,26 @@ float calcular_PID(controleMotor_t *ctrl, float dt) {
 
 	ctrl->erro_anterior = erro;
 
-	return saida_bruta; // essa saida aqui já é meu PWM, so tenho que normalizar ele pro valor de 0 a 10000
+	return saida_bruta; // saida referente a uma porcentagem da ativação do pwm, varia ve -1 a 1
 
 }
 
-/*Já ta concertado graças a marcio*/
-// Compute Omega Wheel Speed
+
+// Calcula a velocidade angular
 float OmegaSpeedLeft(float dif_countLeft, float Ts){
-   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15412 PPR / 1000ms
+   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
    return wheelSpeedLeft;
 }
 
+
 float OmegaSpeedRight(float dif_countRight, float Ts){
-   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15292 PPR / 1000ms
+   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
    return wheelSpeedRight;
+}
+
+// Calcula a velocidade angular
+float Linear2RPM(float V_lin, roboDiferencial_t robo){
+   return V_lin * 60 / (robo.raio_roda * 2 * 3.1415);
 }
 
 // Delay us
@@ -295,49 +233,6 @@ float OmegaSpeedRight(float dif_countRight, float Ts){
 //{
 //  __HAL_TIM_SET_COUNTER(&htim8,0); // set the counter value 0
 //  while (__HAL_TIM_GET_COUNTER(&htim8) < us);  // wait for the counter to reach the us input in the parameter
-//}
-
-// Principals commands for Speed Control
-//void Wheel_Commands(float wheelSETLeft, float wheelSETRight){
-//	//TIM3->CNT = 0; // Reinicializa sempre os contadores
-//	//TIM2->CNT = 0;
-//   newPosLeft =  __HAL_TIM_GET_COUNTER(&htim3);
-//   newPosRight = __HAL_TIM_GET_COUNTER(&htim2);
-//
-//   oldPosLeft = newPosLeft;
-//   oldPosRight = newPosRight;
-//
-//   //delay_us(10000);  // delay in us
-//   HAL_Delay(Ts);  // Ts = 10ms de tempo de amostragem ou integração
-//
-//   Time = Time + Ts; // Time in ms
-//   newPosLeft =  __HAL_TIM_GET_COUNTER(&htim3);
-//   newPosRight = __HAL_TIM_GET_COUNTER(&htim2);
-//
-//   dif_countLeft = (int16_t)(newPosLeft-oldPosLeft);
-//   dif_countRight = (int32_t)(newPosRight-oldPosRight);
-//
-//   wheelMEASLeft =  (float)OmegaSpeedLeft((float)dif_countLeft, Ts); // Wheel Speed Left Side in RPM
-//   wheelMEASRight = (float)OmegaSpeedRight((float)dif_countRight, Ts);  // Wheel Speed Right Side in RPM
-//
-//   PWMLeft = (float)computePIDLeft(wheelMEASLeft,wheelSETLeft);
-//   //PWMLeft = (float)Satura(100*PWMLeft);
-//   CH1_PWM_duty = (int)(abs(100*PWMLeft));
-//
-//   PWMRight = (float)computePIDRight(wheelMEASRight,wheelSETRight);
-//   //PWMRight = (float)Satura(100*PWMRight);
-//   CH2_PWM_duty = (int)(abs(100*PWMRight));
-//
-//   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8,GPIO_PIN_RESET);  // LEFT MOTOR
-//   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9,GPIO_PIN_SET);
-//
-//   __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1,  CH1_PWM_duty);
-//
-//   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10,GPIO_PIN_SET); // RIGHT MOTOR
-//   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11,GPIO_PIN_RESET);
-//
-//   __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2,  CH2_PWM_duty);
-//
 //}
 /* USER CODE END 0 */
 
@@ -398,29 +293,37 @@ int main(void)
   HAL_TIM_Base_Start(&htim8);
 
   LCD_Test();
-  int counterValue1 = 0;
-  int counterValue2 = 0;
 
-
+  // ============================================
+  // Definição dos parametros do pid
+  // ============================================
+  //esse aqui esta pronto
   robo.motor_dir.Kd = 0.0;
   robo.motor_dir.Kp = 43.3526254527816;
   robo.motor_dir.Ki = 1817.9632631973;
-  robo.motor_dir.erro_anterior = 0.0;
-  robo.motor_dir.integral = 0.0;
-  robo.motor_dir.medida = 0.0;
 
-  robo.motor_dir.setpoint = -109.0/10000.0;
-  robo.motor_esq.setpoint = 109.0/10000.0;
-
-
-
-  //esse aqui esta pronto
   robo.motor_esq.Kd = 0.0;
   robo.motor_esq.Kp = 43.3526254527816;
   robo.motor_esq.Ki = 1817.9632631973;
+
+  // =================================
+  // Definição dos setpoints iniciais
+  // =================================
+
+  robo.motor_dir.setpoint = 0.0;
+  robo.motor_esq.setpoint = 0.0;
+
+  // ===================================
+  // 	Definição do estado inicial
+  // ===================================
+
   robo.motor_esq.erro_anterior = 0.0;
-  robo.motor_dir.integral = 0.0;
+  robo.motor_esq.integral = 0.0;
   robo.motor_esq.medida = 0.0;
+
+  robo.motor_dir.erro_anterior = 0.0;
+  robo.motor_dir.integral = 0.0;
+  robo.motor_dir.medida = 0.0;
 
 
 	/* Run the ADC calibration in single-ended mode */
@@ -481,17 +384,13 @@ int main(void)
 		vrefint    = uhADCxInputVoltage[1]; // type. 1200mV
 		tempsensor = ((int32_t)uhADCxInputVoltage[2] - V30)/Avg_Slope + 30; //   C
 		vbat       = uhADCxInputVoltage[3] * 4;
-		robo.motor_dir.setpoint = ((float)valor_pwm)/10000.0;
-		robo.motor_esq.setpoint = ((float)valor_pwm)/10000.0;
+		robo.motor_dir.setpoint = ((float)Linear2RPM(vel_linear,robo))/10000.0;
+		robo.motor_esq.setpoint = ((float)Linear2RPM(vel_linear,robo))/10000.0;
 
-		//TIM3->CNT = counterValue1; // Left Motor encoder
-		//TIM2->CNT = counterValue2; // Right Motor encoder
-//		uint8_t text[200];
-//		counterValue1 = __HAL_TIM_GET_COUNTER(&htim3);
-//		counterValue2 = __HAL_TIM_GET_COUNTER(&htim2);
-//
-//		sprintf((char *)&text, "EE:%d ED:%d\r\n", counterValue1, counterValue2);
-//		CDC_Transmit_FS((uint8_t *)text, strlen(text));
+		if (Time < 2000)
+			vel_linear = vel_linear;
+		else
+			vel_linear = 0;
 		uint8_t text[200];
 		// 1. Leitura dos Encoders
 		        newPosLeft =  __HAL_TIM_GET_COUNTER(&htim3);
@@ -551,39 +450,6 @@ int main(void)
 		        sprintf((char *)&text, "WrL: %5.2f WrR: %5.2f | med D: %f med E: %f pid1 %.5f pid2 %.5f\r\n",
 		        		wheelMEASLeft, wheelMEASRight, robo.motor_dir.medida, robo.motor_esq.medida, pid1, pid2);
 		        CDC_Transmit_FS((uint8_t *)text, strlen(text));
-//		        sprintf((char *)&text, "Pulsos R: %d Pulsos L: %d\r\n",
-//newPosLeft, newPosRight);
-//				CDC_Transmit_FS((uint8_t *)text, strlen(text));
-
-//		} else {
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8,GPIO_PIN_SET);  // LEFT MOTOR
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9,GPIO_PIN_SET);
-//
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10,GPIO_PIN_SET); // RIGHT MOTOR
-//			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11,GPIO_PIN_SET);
-//			uint8_t text[200];
-//			char dados[60];
-//
-//			bno055_vector_t v = bno055_getVectorEuler();
-//			LED_Pisca(10);
-//
-//
-//
-//
-//			sprintf((char *)&text, "Vref: %d WmSET:%4.1f\r\n", vrefint, valor_pwm);
-//			//sprintf((char *)&text, "Wl:%6d Wr:%6d", newPosLeft, newPosRight);
-//			LCD_ShowString(4, 22, ST7735Ctx.Width, 16, 12, text);
-//	//		CDC_Transmit_FS((uint8_t *)text, strlen(text));
-//			sprintf((char *)&text, "Wm01:%5.2f Wm02:%5.2f\r\n", wheelMEASLeft, wheelMEASRight);
-//			LCD_ShowString(4, 40, ST7735Ctx.Width, 16, 12, text);
-//	//		CDC_Transmit_FS((uint8_t *)text, strlen(text));
-//			sprintf((char *)&text, "EE:%d ED:%d\r\n", counterValue1, counterValue2);
-//			LCD_ShowString(4, 58, ST7735Ctx.Width, 16, 12, text);
-//	//		CDC_Transmit_FS((uint8_t *)text, strlen(text));
-//			//sprintf(dados, "%4d %4d %4d %4d %.2f\r\n", dadoadc1, dadoadc2, dadoadc3, dadoadc4, angleValue);
-//			//CDC_Transmit_FS((uint8_t *)dados, strlen(dados));
-
-
   }
   /* USER CODE END 3 */
 }
