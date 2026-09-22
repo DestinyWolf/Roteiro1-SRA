@@ -52,12 +52,15 @@ typedef struct RoboDiferencial {
 	float L, raio_roda;
 	float rpm_max, rpm_min;
 	float velocidade_linear, velocidade_angular;
+	float pos_x, pos_y;
+	float theta;
 } roboDiferencial_t;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a,b) ((a) < (b) ? (a):(b))
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -92,6 +95,7 @@ float Time = 0; // increment in ms
 float wheelMEASLeft, wheelMEASRight;
 
 
+//os parametros tem que ser passados em centimetros
 
 roboDiferencial_t robo = {
 		.L = 0.22,
@@ -99,7 +103,11 @@ roboDiferencial_t robo = {
 		.rpm_max = 209,
 		.rpm_min = -209,
 		.velocidade_angular = 0.0,
-		.velocidade_linear = 0.0
+		.velocidade_linear = 0.0,
+		.pos_x = 0.0,
+		.pos_y = 0.0,
+		.theta = 0.0,
+
 };
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -230,6 +238,46 @@ float Linear2RPM(float V_lin, roboDiferencial_t robo){
    return V_lin * 60 / (robo.raio_roda * 2 * M_PI);
 }
 
+
+void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, float y_d, float K_l, float K_theta, float V_max, float omega_max, float tol) {
+	float delta_x, delta_y, delta_l, delta_theta;
+	float theta_d;
+	float delta_l_projetado;
+	delta_x = x_d - robo->pos_x;
+	delta_y = y_d - robo->pos_y;
+
+	delta_l = sqrt(pow(delta_x,2) + pow(delta_y,2));
+
+	if (delta_l < tol) {
+		robo->velocidade_angular = 0.0;
+		robo->velocidade_linear = 0.0;
+		return;
+	}
+
+	theta_d = atan2(delta_y, delta_x);
+	delta_theta = theta_d-robo->theta;
+	delta_theta = atan2(sin(delta_theta), cos(delta_theta));
+	delta_l_projetado = delta_l*cos(delta_theta);
+	robo->velocidade_linear = K_l*delta_l_projetado;
+	robo->velocidade_angular = K_theta*delta_theta;
+
+	robo->velocidade_linear = MAX(-V_max, MIN(V_max, robo->velocidade_linear));
+	robo->velocidade_angular  = MAX(-omega_max, MIN(omega_max, robo->velocidade_angular));
+
+	return;
+}
+
+
+void CalcularVelAngularRoda(roboDiferencial_t *robo) {
+	float omegaE, omegaD;
+
+	omegaE = (1/robo->raio_roda)*robo->velocidade_linear - (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
+
+	omegaD = (1/robo->raio_roda)*robo->velocidade_linear + (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
+
+	robo->motor_dir.setpoint = omegaD*(60/(2*M_PI))/10000;
+	robo->motor_dir.setpoint = omegaE*(60/(2*M_PI))/10000;
+}
 // Delay us
 //void delay_us(uint16_t us)
 //{
