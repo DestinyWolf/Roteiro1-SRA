@@ -238,6 +238,16 @@ float Linear2RPM(float V_lin, roboDiferencial_t robo){
    return V_lin * 60 / (robo.raio_roda * 2 * M_PI);
 }
 
+void CalcularVelAngularRodas(roboDiferencial_t *robo) {
+	float omegaE, omegaD;
+
+	omegaE = (1/robo->raio_roda)*robo->velocidade_linear - (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
+
+	omegaD = (1/robo->raio_roda)*robo->velocidade_linear + (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
+
+	robo->motor_dir.setpoint = omegaD*(60/(2*M_PI))/10000.0;
+	robo->motor_dir.setpoint = omegaE*(60/(2*M_PI))/10000.0;
+}
 
 void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, float y_d, float K_l, float K_theta, float V_max, float omega_max, float tol) {
 	float delta_x, delta_y, delta_l, delta_theta;
@@ -263,21 +273,14 @@ void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, floa
 
 	robo->velocidade_linear = MAX(-V_max, MIN(V_max, robo->velocidade_linear));
 	robo->velocidade_angular  = MAX(-omega_max, MIN(omega_max, robo->velocidade_angular));
-
+	CalcularVelAngularRodas(robo);
+	robo->pos_x = robo->pos_x + robo->velocidade_linear*cos(robo->theta)*Ts;
+	robo->pos_y = robo->pos_y + robo->velocidade_linear*sin(robo->theta)*Ts;
+	robo->theta = robo->theta + robo->velocidade_angular*Ts;
+	robo->theta = atan2(sin(robo->theta), cos(robo->theta));
 	return;
 }
 
-
-void CalcularVelAngularRoda(roboDiferencial_t *robo) {
-	float omegaE, omegaD;
-
-	omegaE = (1/robo->raio_roda)*robo->velocidade_linear - (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
-
-	omegaD = (1/robo->raio_roda)*robo->velocidade_linear + (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
-
-	robo->motor_dir.setpoint = omegaD*(60/(2*M_PI))/10000;
-	robo->motor_dir.setpoint = omegaE*(60/(2*M_PI))/10000;
-}
 // Delay us
 //void delay_us(uint16_t us)
 //{
@@ -434,13 +437,9 @@ int main(void)
 		vrefint    = uhADCxInputVoltage[1]; // type. 1200mV
 		tempsensor = ((int32_t)uhADCxInputVoltage[2] - V30)/Avg_Slope + 30; //   C
 		vbat       = uhADCxInputVoltage[3] * 4;
-		robo.motor_dir.setpoint = ((float)Linear2RPM(vel_linear,robo))/10000.0;
-		robo.motor_esq.setpoint = ((float)Linear2RPM(vel_linear,robo))/10000.0;
 
-		if (Time < 2000)
-			vel_linear = vel_linear;
-		else
-			vel_linear = 0;
+		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 1.5, 0.7, 0.7, 0.0001);
+
 		uint8_t text[200];
 		// 1. Leitura dos Encoders
 		        newPosLeft =  __HAL_TIM_GET_COUNTER(&htim3);
@@ -476,7 +475,7 @@ int main(void)
 		        CH2_PWM_duty = (int)(abs(pid2) * 10000.0);
 
 		        // 8. Controle de Direção - MOTOR ESQUERDO
-		        if (pid1 < 0) {
+		        if (pid1 > 0) {
 		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);  // FRENTE
 		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
 		        } else {
@@ -486,7 +485,7 @@ int main(void)
 		        __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, CH1_PWM_duty);
 
 		        // 9. Controle de Direção - MOTOR DIREITO
-		        if (pid2 < 0) {
+		        if (pid2 > 0) {
 		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);  // FRENTE
 		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
 		        } else {
