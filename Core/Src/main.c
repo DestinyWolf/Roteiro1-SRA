@@ -29,10 +29,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#define _USE_MATH_DEFINES
 #include "lcd.h"
 #include <stdio.h>
 #include "bno055_stm32.h"
 #include "usbd_cdc_if.h"
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -68,7 +70,7 @@ typedef struct RoboDiferencial {
 /* USER CODE BEGIN PV */
 
 //valor da velocidade linear
-float vel_linear = 0.05;
+float vel_linear = 0.1;
 
 // Sinal de controle, ciclo de duração PWM
 int CH1_PWM_duty = 0; // Inicializa ciclo de duração PWM
@@ -92,8 +94,8 @@ float wheelMEASLeft, wheelMEASRight;
 
 
 roboDiferencial_t robo = {
-		.L = 22.0,
-		.raio_roda = 3.625,
+		.L = 0.22,
+		.raio_roda = 0.033,
 		.rpm_max = 209,
 		.rpm_min = -209,
 		.velocidade_angular = 0.0,
@@ -225,7 +227,7 @@ float OmegaSpeedRight(float dif_countRight, float Ts){
 
 // Calcula a velocidade angular
 float Linear2RPM(float V_lin, roboDiferencial_t robo){
-   return V_lin * 60 / (robo.raio_roda * 2 * 3.1415);
+   return V_lin * 60 / (robo.raio_roda * 2 * M_PI);
 }
 
 // Delay us
