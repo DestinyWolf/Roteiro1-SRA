@@ -51,6 +51,7 @@ typedef struct RoboDiferencial {
 	controleMotor_t motor_esq, motor_dir;
 	float L, raio_roda;
 	float rpm_max, rpm_min;
+	float v_max, omega_max;
 	float velocidade_linear, velocidade_angular;
 	float pos_x, pos_y;
 	float theta;
@@ -102,6 +103,8 @@ roboDiferencial_t robo = {
 		.raio_roda = 0.033,
 		.rpm_max = 209,
 		.rpm_min = -209,
+		.v_max = 0.72,
+		.omega_max = 0.72 / 0.033,
 		.velocidade_angular = 0.0,
 		.velocidade_linear = 0.0,
 		.pos_x = 0.0,
@@ -246,10 +249,10 @@ void CalcularVelAngularRodas(roboDiferencial_t *robo) {
 	omegaD = (1/robo->raio_roda)*robo->velocidade_linear + (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
 
 	robo->motor_dir.setpoint = omegaD*(60/(2*M_PI))/10000.0;
-	robo->motor_dir.setpoint = omegaE*(60/(2*M_PI))/10000.0;
+	robo->motor_esq.setpoint = omegaE*(60/(2*M_PI))/10000.0;
 }
 
-void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, float y_d, float K_l, float K_theta, float V_max, float omega_max, float tol) {
+void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, float y_d, float K_l, float K_theta, float tol) {
 	float delta_x, delta_y, delta_l, delta_theta;
 	float theta_d;
 	float delta_l_projetado;
@@ -271,13 +274,61 @@ void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, floa
 	robo->velocidade_linear = K_l*delta_l_projetado;
 	robo->velocidade_angular = K_theta*delta_theta;
 
-	robo->velocidade_linear = MAX(-V_max, MIN(V_max, robo->velocidade_linear));
-	robo->velocidade_angular  = MAX(-omega_max, MIN(omega_max, robo->velocidade_angular));
+	robo->velocidade_linear = MAX(-robo->v_max, MIN(robo->v_max, robo->velocidade_linear));
+	robo->velocidade_angular = MAX(-robo->omega_max, MIN(robo->omega_max, robo->velocidade_angular));
 	CalcularVelAngularRodas(robo);
 	robo->pos_x = robo->pos_x + robo->velocidade_linear*cos(robo->theta)*Ts;
 	robo->pos_y = robo->pos_y + robo->velocidade_linear*sin(robo->theta)*Ts;
 	robo->theta = robo->theta + robo->velocidade_angular*Ts;
 	robo->theta = atan2(sin(robo->theta), cos(robo->theta));
+	return;
+}
+
+
+void ControleReferenciaVariavelPostura(roboDiferencial_t* robo, float x_d, float y_d, float theta_d, float K_l, float K_theta, float tol){
+    float delta_x, delta_y, delta_l, erro_theta, delta_theta, theta_r, x_r, y_r;
+	float phi;
+	float delta_l_ref;
+
+	delta_x = x_d - robo->pos_x;
+	delta_y = y_d - robo->pos_y;
+
+	delta_l = sqrt(pow(delta_x, 2) + pow(delta_y, 2));
+
+	erro_theta = atan2(sin(theta_d - robo->theta), cos(theta_d - robo->theta));
+
+	if (delta_l < tol && abs(erro_theta) < tol){
+		robo->velocidade_linear = 0.0;
+		robo->velocidade_angular = 0.0;
+		return;
+	}
+
+	if (delta_l < tol)
+		phi = theta_d;
+	else
+		phi = atan2(delta_y, delta_x);
+
+	theta_r = atan2(sin(2*phi - theta_d), cos(2*phi - theta_d));
+
+
+	delta_theta = atan2(sin(theta_r - robo->theta), cos(theta_r - robo->theta));
+
+	x_r = robo->pos_x + delta_l * cos(theta_r);
+	y_r = robo->pos_y + delta_l * sin(theta_r);
+	delta_l_ref = sqrt(pow((x_r - robo->pos_x),2) + pow((y_r - robo->pos_y),2));
+
+	robo->velocidade_linear = K_l * delta_l_ref;
+	robo->velocidade_angular = K_theta * delta_theta;
+
+	robo->velocidade_linear = MAX(-robo->v_max, MIN(robo->v_max, robo->velocidade_linear));
+	robo->velocidade_angular = MAX(-robo->omega_max, MIN(robo->omega_max, robo->velocidade_angular));
+
+    CalcularVelAngularRodas(robo);
+	robo->pos_x = robo->pos_x + robo->velocidade_linear*cos(robo->theta)*Ts;
+	robo->pos_y = robo->pos_y + robo->velocidade_linear*sin(robo->theta)*Ts;
+	robo->theta = robo->theta + robo->velocidade_angular*Ts;
+	robo->theta = atan2(sin(robo->theta), cos(robo->theta));
+
 	return;
 }
 
@@ -438,7 +489,7 @@ int main(void)
 		tempsensor = ((int32_t)uhADCxInputVoltage[2] - V30)/Avg_Slope + 30; //   C
 		vbat       = uhADCxInputVoltage[3] * 4;
 
-		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 1.5, 0.7, 0.7, 0.0001);
+		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 1.5, 0.0001);
 
 		uint8_t text[200];
 		// 1. Leitura dos Encoders
@@ -496,8 +547,10 @@ int main(void)
 
 
 		        // Print para debug
-		        sprintf((char *)&text, "WrL: %5.2f WrR: %5.2f | med D: %f med E: %f pid1 %.5f pid2 %.5f\r\n",
-		        		wheelMEASLeft, wheelMEASRight, robo.motor_dir.medida, robo.motor_esq.medida, pid1, pid2);
+		        sprintf((char *)&text, "WrL: %5.2f WrR: %5.2f | pos_x: %.3f pos_y: %.3f theta: %.3f pid1 %.5f pid2 %.5f\r\n",
+		        		wheelMEASLeft, wheelMEASRight, robo.pos_x, robo.pos_y, robo.theta, pid1, pid2);
+        		LCD_ShowString(4, 22, ST7735Ctx.Width, 16, 12, text);
+
 		        CDC_Transmit_FS((uint8_t *)text, strlen(text));
   }
   /* USER CODE END 3 */
