@@ -221,29 +221,29 @@ float calcular_PID(controleMotor_t *ctrl, float dt) {
 
 
 // Calcula a velocidade angular
-//float OmegaSpeedLeft(float dif_countLeft, float Ts){
-//   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
-//   return wheelSpeedLeft;
-//}
-//
-//
-//float OmegaSpeedRight(float dif_countRight, float Ts){
-//   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
-//   return wheelSpeedRight;
-//}
-
-// Calcula a velocidade angular
 float OmegaSpeedLeft(float dif_countLeft, float Ts){
-   // CORRIGIDO: 15336.0 em vez de 15.336
-   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15336.0));
+   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
    return wheelSpeedLeft;
 }
 
+
 float OmegaSpeedRight(float dif_countRight, float Ts){
-   // CORRIGIDO: 15336.0 em vez de 15.336
-   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15336.0));
+   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
    return wheelSpeedRight;
 }
+
+// Calcula a velocidade angular
+//float OmegaSpeedLeft(float dif_countLeft, float Ts){
+//   // CORRIGIDO: 15336.0 em vez de 15.336
+//   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15336.0));
+//   return wheelSpeedLeft;
+//}
+//
+//float OmegaSpeedRight(float dif_countRight, float Ts){
+//   // CORRIGIDO: 15336.0 em vez de 15.336
+//   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15336.0));
+//   return wheelSpeedRight;
+//}
 
 // Calcula a velocidade angular
 float Linear2RPM(float V_lin, roboDiferencial_t robo){
@@ -457,8 +457,8 @@ int main(void)
 		vbat       = uhADCxInputVoltage[3] * 4;
 
 
-		robo.motor_dir.setpoint = 0.6;
-		robo.motor_esq.setpoint = 0.6;
+		//robo.motor_dir.setpoint = 0.6;
+		//robo.motor_esq.setpoint = 0.6;
 		uint8_t text[200];
 		// 1. Leitura dos Encoders
 		newPosRight =  __HAL_TIM_GET_COUNTER(&htim3);
@@ -474,8 +474,8 @@ int main(void)
 		oldPosRight = newPosRight;
 
 		// 4. Calcula Velocidades Reais (Pode desfazer a inversão, agora vai bater certo!)
-		wheelMEASLeft = (float)OmegaSpeedLeft((float)deltaLeft, Ts);
-		wheelMEASRight = (float)OmegaSpeedRight((float)deltaRight, Ts);
+		wheelMEASLeft = (float)OmegaSpeedLeft((float)deltaLeft, Ts_ms);
+		wheelMEASRight = (float)OmegaSpeedRight((float)deltaRight, Ts_ms);
 
 		// 5. Alimenta a estrutura do robô
 		robo.motor_esq.medida =  wheelMEASRight / 10000.0;
@@ -519,7 +519,7 @@ int main(void)
 		HAL_Delay(Ts_ms);
 		Time = Time + (float)Ts_ms;
 
-		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 2.5, 0.7, 0.7, 0.015);
+		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 0.25, 0.5, 0.7, 0.7, 0.015);
   }
   /* USER CODE END 3 */
 }
