@@ -88,8 +88,9 @@ uint32_t newPos, oldPos, wheelSpeed;
 int32_t dif_countLeft = 0;
 int32_t dif_countRight = 0;
 
-
-float Ts = 1.0;  // Ts = 1ms
+// Substitua o float Ts = 1.0/1000.0 por isso:
+uint32_t Ts_ms = 10;       // 10 milissegundos (Para o Delay do hardware)
+float Ts = 10.0 / 1000.0; // 0.01 segundos (Para a Matemática do PID e Odometria)
 float Time = 0; // increment in ms
 
 float wheelMEASLeft, wheelMEASRight;
@@ -201,35 +202,46 @@ float calcular_PID(controleMotor_t *ctrl, float dt) {
 
 	saida_bruta = P + I + D;
 
-	//sprintf((char *)&text, "pid: %.5f erro: %.5f\r\n", saida_bruta, erro);
-    //CDC_Transmit_FS((uint8_t *)text, strlen(text));
+	sprintf((char *)&text, "pid: %.5f erro: %.5f\r\n", saida_bruta, erro);
+    CDC_Transmit_FS((uint8_t *)text, strlen(text));
 
 
 	/*saturação*/
-	if (saida_bruta > 1) {
-		ctrl->integral = ctrl->integral - erro*dt;
-		saida_bruta = 1;
-	} else if (saida_bruta < -1) {
-		ctrl->integral = ctrl->integral - erro*dt;
-		saida_bruta = -1;
+    if (saida_bruta > 1.0) {
+		ctrl->integral = ctrl->integral - ctrl->Ki*(erro*dt); // Agora tem o Ki
+		saida_bruta = 1.0;
+	} else if (saida_bruta < -1.0) {
+		ctrl->integral = ctrl->integral - ctrl->Ki*(erro*dt); // Agora tem o Ki
+		saida_bruta = -1.0;
 	}
-
 	ctrl->erro_anterior = erro;
-
-	return saida_bruta; // saida referente a uma porcentagem da ativação do pwm, varia ve -1 a 1
+	return saida_bruta;
 
 }
 
 
 // Calcula a velocidade angular
+//float OmegaSpeedLeft(float dif_countLeft, float Ts){
+//   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
+//   return wheelSpeedLeft;
+//}
+//
+//
+//float OmegaSpeedRight(float dif_countRight, float Ts){
+//   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
+//   return wheelSpeedRight;
+//}
+
+// Calcula a velocidade angular
 float OmegaSpeedLeft(float dif_countLeft, float Ts){
-   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
+   // CORRIGIDO: 15336.0 em vez de 15.336
+   float wheelSpeedLeft = (float)((dif_countLeft/Ts)*(60.0/15336.0));
    return wheelSpeedLeft;
 }
 
-
 float OmegaSpeedRight(float dif_countRight, float Ts){
-   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15.336));  // Wheel Side in RPM ****** where 15336 PPR / 1000ms
+   // CORRIGIDO: 15336.0 em vez de 15.336
+   float wheelSpeedRight = (float)((dif_countRight/Ts)*(60.0/15336.0));
    return wheelSpeedRight;
 }
 
@@ -245,8 +257,8 @@ void CalcularVelAngularRodas(roboDiferencial_t *robo) {
 
 	omegaD = (1/robo->raio_roda)*robo->velocidade_linear + (robo->L/(robo->raio_roda*2))*robo->velocidade_angular;
 
-	robo->motor_dir.setpoint = omegaD*(60/(2*M_PI))/10000.0;
-	robo->motor_dir.setpoint = omegaE*(60/(2*M_PI))/10000.0;
+	robo->motor_dir.setpoint = (omegaD*(60/(2*M_PI)))/10000.0;
+	robo->motor_esq.setpoint = (omegaE*(60/(2*M_PI)))/10000.0;
 }
 
 void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, float y_d, float K_l, float K_theta, float V_max, float omega_max, float tol) {
@@ -261,6 +273,12 @@ void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, floa
 	if (delta_l < tol) {
 		robo->velocidade_angular = 0.0;
 		robo->velocidade_linear = 0.0;
+		robo->motor_dir.setpoint = 0.0;
+		robo->motor_esq.setpoint = 0.0;
+		robo->motor_dir.integral = 0.0;
+		robo->motor_esq.integral = 0.0;
+		robo->motor_dir.medida = 0.0;
+		robo->motor_esq.medida = 0.0;
 		return;
 	}
 
@@ -274,8 +292,8 @@ void ControleReferenciaVariavelPosicao(roboDiferencial_t * robo, float x_d, floa
 	robo->velocidade_linear = MAX(-V_max, MIN(V_max, robo->velocidade_linear));
 	robo->velocidade_angular  = MAX(-omega_max, MIN(omega_max, robo->velocidade_angular));
 	CalcularVelAngularRodas(robo);
-	robo->pos_x = robo->pos_x + robo->velocidade_linear*cos(robo->theta)*Ts;
-	robo->pos_y = robo->pos_y + robo->velocidade_linear*sin(robo->theta)*Ts;
+	robo->pos_x = robo->pos_x + (robo->velocidade_linear*cos(robo->theta)*Ts);
+	robo->pos_y = robo->pos_y + (robo->velocidade_linear*sin(robo->theta)*Ts);
 	robo->theta = robo->theta + robo->velocidade_angular*Ts;
 	robo->theta = atan2(sin(robo->theta), cos(robo->theta));
 	return;
@@ -438,67 +456,70 @@ int main(void)
 		tempsensor = ((int32_t)uhADCxInputVoltage[2] - V30)/Avg_Slope + 30; //   C
 		vbat       = uhADCxInputVoltage[3] * 4;
 
-		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 1.5, 0.7, 0.7, 0.0001);
 
+		robo.motor_dir.setpoint = 0.6;
+		robo.motor_esq.setpoint = 0.6;
 		uint8_t text[200];
 		// 1. Leitura dos Encoders
-		        newPosLeft =  __HAL_TIM_GET_COUNTER(&htim3);
-		        newPosRight = __HAL_TIM_GET_COUNTER(&htim2);
+		newPosRight =  __HAL_TIM_GET_COUNTER(&htim3);
+		newPosLeft = __HAL_TIM_GET_COUNTER(&htim2);
 
-		        // 2. Calcula a diferença dos contadores e resolve o overflow CORRETAMENTE
-		        // TIM3 (Left) é 16-bits, então obrigatório o cast para int16_t
-		        int16_t deltaLeft = (int16_t)(newPosLeft - oldPosLeft);
-		        // TIM2 (Right) é 32-bits, então obrigatório o cast para int32_t
-		        int32_t deltaRight = (int32_t)(newPosRight - oldPosRight);
+		// 2. Calcula a diferença dos contadores e resolve o overflow CORRETAMENTE
+		// TIM3 (Right) é 16-bits, então obrigatório o cast para int16_t
+		int16_t deltaLeft = (newPosLeft - oldPosLeft);
+		// TIM2 (Left) é 32-bits, então obrigatório o cast para int32_t
+		int32_t deltaRight = (newPosRight - oldPosRight);
 
-		        oldPosLeft = newPosLeft;
-		        oldPosRight = newPosRight;
+		oldPosLeft = newPosLeft;
+		oldPosRight = newPosRight;
 
-		        // 3. Tempo de amostragem
-		        HAL_Delay(Ts);
-		        Time = Time + Ts;
+		// 4. Calcula Velocidades Reais (Pode desfazer a inversão, agora vai bater certo!)
+		wheelMEASLeft = (float)OmegaSpeedLeft((float)deltaLeft, Ts);
+		wheelMEASRight = (float)OmegaSpeedRight((float)deltaRight, Ts);
 
-		        // 4. Calcula Velocidades Reais (Pode desfazer a inversão, agora vai bater certo!)
-		        wheelMEASLeft = (float)OmegaSpeedLeft((float)deltaLeft, Ts);
-		        wheelMEASRight = (float)OmegaSpeedRight((float)deltaRight, Ts);
+		// 5. Alimenta a estrutura do robô
+		robo.motor_esq.medida =  wheelMEASRight / 10000.0;
+		robo.motor_dir.medida =  wheelMEASLeft / 10000.0;
 
-		        // 5. Alimenta a estrutura do robô
-		        robo.motor_esq.medida =  wheelMEASRight / 10000.0;
-		        robo.motor_dir.medida =  wheelMEASLeft / 10000.0;
+		// 6. Calcula o PID (Passando Ts em SEGUNDOS)
+		float pid1 = calcular_PID(&robo.motor_esq, Ts);
+		float pid2 = calcular_PID(&robo.motor_dir, Ts);
 
-		        // 6. Calcula o PID (Passando Ts em SEGUNDOS)
-		        float pid1 = calcular_PID(&robo.motor_esq, Ts / 1000.0);
-		        float pid2 = calcular_PID(&robo.motor_dir, Ts / 1000.0);
+		// 7. Calcula Duty Cycle Linearizado (Como no Simulink)
+		CH1_PWM_duty = (int)(abs(pid1) * 10000.0);
+		CH2_PWM_duty = (int)(abs(pid2) * 10000.0);
 
-		        // 7. Calcula Duty Cycle Linearizado (Como no Simulink)
-		        CH1_PWM_duty = (int)(abs(pid1) * 10000.0);
-		        CH2_PWM_duty = (int)(abs(pid2) * 10000.0);
+		// 8. Controle de Direção - MOTOR ESQUERDO
+		if (pid1 < 0) {
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);  // FRENTE
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
+		} else {
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET); // RÉ (CORRIGIDO)
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
+		}
+		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, CH1_PWM_duty);
 
-		        // 8. Controle de Direção - MOTOR ESQUERDO
-		        if (pid1 > 0) {
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_RESET);  // FRENTE
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_SET);
-		        } else {
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_8, GPIO_PIN_SET); // RÉ (CORRIGIDO)
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_9, GPIO_PIN_RESET);
-		        }
-		        __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, CH1_PWM_duty);
+		// 9. Controle de Direção - MOTOR DIREITO
+		if (pid2 < 0) {
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);  // FRENTE
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
+		} else {
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET); // RÉ (CORRIGIDO)
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
+		}
+		__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, CH2_PWM_duty);
 
-		        // 9. Controle de Direção - MOTOR DIREITO
-		        if (pid2 > 0) {
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_RESET);  // FRENTE
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_SET);
-		        } else {
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_10, GPIO_PIN_SET); // RÉ (CORRIGIDO)
-		            HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, GPIO_PIN_RESET);
-		        }
-		        __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_2, CH2_PWM_duty);
+		// Print para debug
+		sprintf((char *)&text, "WrL: %5.2f WrR: %5.2f | x %.5f y %.5f vl %.5f vw %.5f p1 %.2f p2 %.2f\r\n",
+				wheelMEASLeft, wheelMEASRight, robo.pos_x, robo.pos_y, robo.velocidade_linear, robo.velocidade_angular,
+				pid1, pid2);
+		CDC_Transmit_FS((uint8_t *)text, strlen(text));
 
+		// 3. Tempo de amostragem
+		HAL_Delay(Ts_ms);
+		Time = Time + (float)Ts_ms;
 
-		        // Print para debug
-		        sprintf((char *)&text, "WrL: %5.2f WrR: %5.2f | med D: %f med E: %f pid1 %.5f pid2 %.5f\r\n",
-		        		wheelMEASLeft, wheelMEASRight, robo.motor_dir.medida, robo.motor_esq.medida, pid1, pid2);
-		        CDC_Transmit_FS((uint8_t *)text, strlen(text));
+		ControleReferenciaVariavelPosicao(&robo, 0.4, 0.0, 1.5, 2.5, 0.7, 0.7, 0.015);
   }
   /* USER CODE END 3 */
 }
